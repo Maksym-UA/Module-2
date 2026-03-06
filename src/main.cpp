@@ -1,52 +1,75 @@
 #include <Arduino.h>
 
-#define ADC_PIN 4
-#define RELAY_PIN 17
-#define VREF 3.0
-#define ADC_RESOLUTION 4095.0
-#define LED_PIN 16
-#define VOLTAGE_THRESHOLD 1.3
-#define VOLTAGE_GIST 0.2
+//Led state
+enum class LedState : uint8_t {
+  Off = LOW,
+  On = HIGH
+};
 
-volatile bool relayState = false; // Track current state (false = OFF, true = ON)
+// Клас-конфігурація зі статичними константами
+struct Config {
+  static constexpr uint8_t ButtonPin  = 17;
+  static constexpr uint8_t LedPin  = 16;
+  static constexpr uint16_t BlinkTime = 500;
+  static constexpr uint8_t  BlinkCount = 5;
+  static constexpr uint32_t PauseInterval = 2000;
+};
 
-float getVoltage(int adcValue){
-  //convert ADC value to voltage on the sensor
-  return ((adcValue / ADC_RESOLUTION) * VREF);
-}
+class Led {
+  private:
+    const uint8_t pin;
+  public:
+    explicit constexpr Led(uint8_t pinNumber) : pin(pinNumber) {}
 
+    void init() const {
+        pinMode(pin, OUTPUT);
+    }
+
+    void set(LedState state) const {
+      digitalWrite(pin, static_cast<uint8_t>(state));
+    }
+};
 
 void setup() {
-  Serial.begin(115200); //start the serial monitor at baude rate of 115200
-  pinMode (LED_PIN, OUTPUT);
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH); // Default OFF
-  analogReadResolution(12); //set the ADC resolution to 12 bits (0-4095)
-  Serial.println("Setup is ready!");
+    static const Led led(Config::LedPin);
+    led.init();
 }
 
 void loop() {
-  int adcValue = 0;
-  adcValue = analogRead(ADC_PIN); //read the ADC value on the pin
-  float voltage = getVoltage(adcValue); //convert ADC value to voltage
-  Serial.printf(
-    "ADC value: %d, Voltage %.2f V\n", adcValue, voltage);
+  static const Led led(Config::LedPin);
 
+  static uint32_t lastUpdateTime = 0;
+  static uint8_t  blinkCounter = 0;
+  static LedState currentState = LedState::Off;
+  static bool isPaused = false;
 
-  if (!relayState && voltage < VOLTAGE_THRESHOLD - VOLTAGE_GIST) {
-    // If it was OFF and gets dark enough, turn it ON
-    digitalWrite(RELAY_PIN, LOW);
-    digitalWrite(LED_PIN, HIGH);
-    relayState = true;
-    Serial.println("Relay Triggered: ON");
+  const uint32_t currentTime = millis();
+  const uint32_t currentInterval = isPaused ? Config::PauseInterval : Config::BlinkTime;
+
+  if (currentTime - lastUpdateTime >= currentInterval) {
+    lastUpdateTime = currentTime;
+
+    if (isPaused) {
+      // Закінчили велику паузу, починаємо нову серію
+      isPaused = false;
+      blinkCounter = 0;
+      currentState = LedState::On;
+    } else {
+      // Логіка перемикання всередині серії
+      if (currentState == LedState::On) {
+          currentState = LedState::Off;
+          blinkCounter++;
+      } else {
+          currentState = LedState::On;
+      }
+
+      // Якщо виконали потрібну кількість блимань (on + off)
+      if (blinkCounter >= Config::BlinkCount) {
+        isPaused = true;
+        currentState = LedState::Off;
+      }
+    }
+    led.set(currentState);
   }
-  else if (relayState && voltage > VOLTAGE_THRESHOLD + VOLTAGE_GIST) {
-    // If it was ON and gets bright enough, turn it OFF
-    digitalWrite(RELAY_PIN, HIGH);
-    digitalWrite(LED_PIN, LOW);
-    relayState = false;
-    Serial.println("Relay Triggered: OFF");
-  }
-
-  delay(200); // Short delay for stability
 }
+

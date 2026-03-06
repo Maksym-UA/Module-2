@@ -34,17 +34,17 @@ class Led {
 
 void setup() {
   //Serial.begin(115200);
-  static const Led led(Config::LedPin);
+  static const Led redLed(Config::LedPin);
   pinMode(Config::ButtonPin, INPUT_PULLUP);
   Serial.begin(Config::BaudRate);
-  led.init();
+  redLed.init();
 }
 
 void loop() {
   static uint32_t lastLoopTime = 0;
   const uint32_t startMicros = micros();
 
-  static const Led led(Config::LedPin);
+  static const Led redLed(Config::LedPin);
 
   static uint32_t lastUpdateTime = 0;
   static uint8_t  blinkCounter = 0;
@@ -77,7 +77,7 @@ void loop() {
         currentState = LedState::Off;
       }
     }
-    led.set(currentState);
+    redLed.set(currentState);
   }
   const uint32_t endMicros = micros();
   const uint32_t loopDuration = endMicros - startMicros;
@@ -86,6 +86,6 @@ void loop() {
   static uint32_t lastSerialTime = 0;
     if (millis() - lastSerialTime >= 1000) {
         lastSerialTime = millis();
-        Serial.printf("Loop execution time: %lu ms\n", loopDuration);
+        Serial.printf("Час виконання циклу: %lu ms\n", loopDuration);
     }
 }

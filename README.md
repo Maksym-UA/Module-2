@@ -1,4 +1,4 @@
-This project ueses a 1-channel relay and a photoresistor to control the LED strip via ESP32 S3
+This project uses the approach of configuring Led Blink with struct,class, superloop architecture control the LED via ESP32 S3
 
 SETUP
 =====

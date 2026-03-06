@@ -6,15 +6,17 @@ enum class LedState : uint8_t {
   On = HIGH
 };
 
-// Клас-конфігурація зі статичними константами
+// Configuration parameters
 struct Config {
   static constexpr uint8_t ButtonPin  = 17;
   static constexpr uint8_t LedPin  = 16;
-  static constexpr uint16_t BlinkTime = 500;
-  static constexpr uint8_t  BlinkCount = 5;
+  static constexpr uint16_t BlinkTime = 300;
+  static constexpr uint8_t  BlinkCount = 7;
   static constexpr uint32_t PauseInterval = 2000;
+  static constexpr uint32_t BaudRate = 115200;
 };
 
+// Class to control the LED
 class Led {
   private:
     const uint8_t pin;
@@ -30,12 +32,19 @@ class Led {
     }
 };
 
+
 void setup() {
-    static const Led led(Config::LedPin);
-    led.init();
+  //Serial.begin(115200);
+  static const Led led(Config::LedPin);
+  pinMode(Config::ButtonPin, INPUT_PULLUP);
+  Serial.begin(Config::BaudRate);
+  led.init();
 }
 
 void loop() {
+  static uint32_t lastLoopTime = 0;
+  const uint32_t startMicros = micros();
+
   static const Led led(Config::LedPin);
 
   static uint32_t lastUpdateTime = 0;
@@ -50,12 +59,12 @@ void loop() {
     lastUpdateTime = currentTime;
 
     if (isPaused) {
-      // Закінчили велику паузу, починаємо нову серію
+      //Pause is over, reset counters and start blinking again
       isPaused = false;
       blinkCounter = 0;
       currentState = LedState::On;
     } else {
-      // Логіка перемикання всередині серії
+      //Toggle LED state
       if (currentState == LedState::On) {
           currentState = LedState::Off;
           blinkCounter++;
@@ -63,7 +72,7 @@ void loop() {
           currentState = LedState::On;
       }
 
-      // Якщо виконали потрібну кількість блимань (on + off)
+      // If we've completed the required number of blinks (on + off)
       if (blinkCounter >= Config::BlinkCount) {
         isPaused = true;
         currentState = LedState::Off;
@@ -71,5 +80,14 @@ void loop() {
     }
     led.set(currentState);
   }
+  const uint32_t endMicros = micros();
+  const uint32_t loopDuration = endMicros - startMicros;
+
+  static uint32_t lastSerialTime = 0;
+    if (millis() - lastSerialTime >= 1000) {
+        lastSerialTime = millis();
+        Serial.printf("Loop execution time: %lu ms\n", loopDuration);
+    }
+
 }
 

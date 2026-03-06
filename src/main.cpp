@@ -24,14 +24,13 @@ class Led {
     explicit constexpr Led(uint8_t pinNumber) : pin(pinNumber) {}
 
     void init() const {
-        pinMode(pin, OUTPUT);
+      pinMode(pin, OUTPUT);
     }
 
     void set(LedState state) const {
       digitalWrite(pin, static_cast<uint8_t>(state));
     }
 };
-
 
 void setup() {
   //Serial.begin(115200);
@@ -83,11 +82,10 @@ void loop() {
   const uint32_t endMicros = micros();
   const uint32_t loopDuration = endMicros - startMicros;
 
+  // Log loop execution time every second to avoid flooding the serial output
   static uint32_t lastSerialTime = 0;
     if (millis() - lastSerialTime >= 1000) {
         lastSerialTime = millis();
         Serial.printf("Loop execution time: %lu ms\n", loopDuration);
     }
-
 }
-

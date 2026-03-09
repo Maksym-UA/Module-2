@@ -32,25 +32,26 @@ class Led {
     }
 };
 
+static const Led redLed(Config::LedPin);
+
 void setup() {
   //Serial.begin(115200);
-  static const Led redLed(Config::LedPin);
   pinMode(Config::ButtonPin, INPUT_PULLUP);
   Serial.begin(Config::BaudRate);
   redLed.init();
 }
 
 void loop() {
+
   static uint32_t lastLoopTime = 0;
-  const uint32_t startMicros = micros();
-
-  static const Led redLed(Config::LedPin);
-
   static uint32_t lastUpdateTime = 0;
-  static uint8_t  blinkCounter = 0;
-  static LedState currentState = LedState::Off;
-  static bool isPaused = false;
+  static uint32_t lastSerialTime = 0;
 
+  static uint8_t  blinkCounter = 0;
+  static bool isPaused = false;
+  static LedState currentState = LedState::Off;
+
+  const uint32_t startMicros = micros();
   const uint32_t currentTime = millis();
   const uint32_t currentInterval = isPaused ? Config::PauseInterval : Config::BlinkTime;
 
@@ -83,9 +84,23 @@ void loop() {
   const uint32_t loopDuration = endMicros - startMicros;
 
   // Log loop execution time every second to avoid flooding the serial output
-  static uint32_t lastSerialTime = 0;
-    if (millis() - lastSerialTime >= 1000) {
-        lastSerialTime = millis();
-        Serial.printf("Час виконання циклу: %lu ms\n", loopDuration);
-    }
+  if (millis() - lastSerialTime >= 1000) {
+    lastSerialTime = millis();
+    Serial.printf("Час виконання циклу: %lu ms\n", loopDuration);
+  }
 }
+
+
+/*
+---FEEDBACK---
+Створений об'єкт Led два рази, один раз в setup(), другий раз в loop():
+static const Led redLed(Config::LedPin);
+Невеличке зауваження:
+В loop() створюються змінні впереміш static const, const ...
+В невеликій програмі це ще можна розібрати, але якщо програма збільшиться, то розібратися в ці суміші змінних буде важче. Краще їх групувати:
+static const
+static
+...
+const
+Це зробить програму більш читабельною.
+*/

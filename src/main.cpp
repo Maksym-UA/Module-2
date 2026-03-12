@@ -1,106 +1,76 @@
 #include <Arduino.h>
 
-//Led state
-enum class LedState : uint8_t {
-  Off = LOW,
-  On = HIGH
-};
+//Configure parameters
+static constexpr uint8_t RelayPin = 17;
+static constexpr uint8_t SensorPin = 16;
+static constexpr uint32_t BaudRate = 115200;
 
-// Configuration parameters
-struct Config {
-  static constexpr uint8_t ButtonPin  = 17;
-  static constexpr uint8_t LedPin  = 16;
-  static constexpr uint16_t BlinkTime = 300;
-  static constexpr uint8_t  BlinkCount = 7;
-  static constexpr uint32_t PauseInterval = 2000;
-  static constexpr uint32_t BaudRate = 115200;
-};
+static int TotalIterations = 15;
 
-// Class to control the LED
-class Led {
-  private:
-    const uint8_t pin;
-  public:
-    explicit constexpr Led(uint8_t pinNumber) : pin(pinNumber) {}
+volatile unsigned long StartTime = 0;
+volatile unsigned long EndTime = 0;
+volatile bool IsMeasuring = false;
 
-    void init() const {
-      pinMode(pin, OUTPUT);
-    }
+unsigned long TotalDuration = 0;
+int count = 0;
 
-    void set(LedState state) const {
-      digitalWrite(pin, static_cast<uint8_t>(state));
-    }
-};
-
-static const Led redLed(Config::LedPin);
+//Configure interrupt service routine
+void IRAM_ATTR SensorISR() {
+  if (EndTime == 0) {
+    EndTime = micros();
+    IsMeasuring = true;
+  }
+}
 
 void setup() {
-  //Serial.begin(115200);
-  pinMode(Config::ButtonPin, INPUT_PULLUP);
-  Serial.begin(Config::BaudRate);
-  redLed.init();
+  Serial.begin(BaudRate);
+  pinMode(RelayPin, OUTPUT);
+  pinMode(SensorPin, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(SensorPin), SensorISR, FALLING);
+
+  Serial.println("Getting ready...");
+  delay(2000); // Wait for 2 seconds before starting the first measurement
 }
 
-void loop() {
+void loop(){
+  if (count < TotalIterations) {
+    EndTime = 0; // Reset end time for the next measurement
+    IsMeasuring = false; // Reset measuring flag
 
-  static uint32_t lastLoopTime = 0;
-  static uint32_t lastUpdateTime = 0;
-  static uint32_t lastSerialTime = 0;
+    Serial.print("Start mesurement #");
+    Serial.print(count + 1);
+    Serial.print(" of ");
+    Serial.println(String(TotalIterations) );
 
-  static uint8_t  blinkCounter = 0;
-  static bool isPaused = false;
-  static LedState currentState = LedState::Off;
+    StartTime = micros();
+    digitalWrite(RelayPin, HIGH);
 
-  const uint32_t startMicros = micros();
-  const uint32_t currentTime = millis();
-  const uint32_t currentInterval = isPaused ? Config::PauseInterval : Config::BlinkTime;
+    //wait realy to activate or timeout after 1 second
+    unsigned long timeout = millis();// + 1000;
+    while (!IsMeasuring && (millis() - timeout < 1000)) {
 
-  if (currentTime - lastUpdateTime >= currentInterval) {
-    lastUpdateTime = currentTime;
-
-    if (isPaused) {
-      //Pause is over, reset counters and start blinking again
-      isPaused = false;
-      blinkCounter = 0;
-      currentState = LedState::On;
-    } else {
-      //Toggle LED state
-      if (currentState == LedState::On) {
-          currentState = LedState::Off;
-          blinkCounter++;
-      } else {
-          currentState = LedState::On;
-      }
-
-      // If we've completed the required number of blinks (on + off)
-      if (blinkCounter >= Config::BlinkCount) {
-        isPaused = true;
-        currentState = LedState::Off;
-      }
+      yield();
     }
-    redLed.set(currentState);
-  }
-  const uint32_t endMicros = micros();
-  const uint32_t loopDuration = endMicros - startMicros;
 
-  // Log loop execution time every second to avoid flooding the serial output
-  if (millis() - lastSerialTime >= 1000) {
-    lastSerialTime = millis();
-    Serial.printf("Час виконання циклу: %lu ms\n", loopDuration);
+    if(IsMeasuring){
+      unsigned long duration = EndTime - StartTime;
+      TotalDuration += duration;
+      Serial.print("Duration: ");
+      Serial.print(duration/1000.0); // Convert to milliseconds
+      Serial.println(" ms");
+      count++;
+    } else {
+      Serial.println("Measurement timed out!");
+    }
+
+    digitalWrite(RelayPin, LOW);
+    delay(1000); // Wait for 1 second before the next measurement
+
+  } else if (count == TotalIterations) {
+    float average = (TotalDuration / (float)TotalIterations) / 1000.0;
+    Serial.print("Average Duration: ");
+    Serial.print(average);
+    Serial.println(" ms");
+    count++;
   }
 }
-
-
-/*
----FEEDBACK---
-Створений об'єкт Led два рази, один раз в setup(), другий раз в loop():
-static const Led redLed(Config::LedPin);
-Невеличке зауваження:
-В loop() створюються змінні впереміш static const, const ...
-В невеликій програмі це ще можна розібрати, але якщо програма збільшиться, то розібратися в ці суміші змінних буде важче. Краще їх групувати:
-static const
-static
-...
-const
-Це зробить програму більш читабельною.
-*/

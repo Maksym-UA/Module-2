@@ -1,4 +1,13 @@
-This project uses the approach of configuring Led Blink with struct,class, superloop architecture control the LED via ESP32 S3
+Superloop and independent tasks
+
+
+Manage several independent processes in one loop() without blocks via ESP32.
+
+Three leds on the board:
+
+LED1 blinks every 200 ms
+LED2 blinks every 500 ms
+LED3 bkinks every 1000 ms
 
 SETUP
 =====

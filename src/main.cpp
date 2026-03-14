@@ -13,22 +13,25 @@ struct Config {
   static constexpr uint8_t Led2 = 17;
   static constexpr uint8_t Led3 = 18;
   static constexpr uint32_t BaudRate = 115200;
+
+  unsigned long storedTimestamp = 0;
 };
 
-static int  TotalIterations = 15;
-volatile unsigned long StartTime = 0;
-volatile unsigned long EndTime = 0;
+static int  TotalBlinks = 15;
 volatile bool isBlinking = false;
 
-unsigned long TotalDuration = 0;
 int count = 0;
 
 // Class to control the LED
 class Led {
   private:
     const uint8_t pin;
+    const uint8_t duration; // Duration in milliseconds for which the LED will be on
+    const unsigned long storedTimestamp; // Timestamp to manage blinking intervals
   public:
-    explicit constexpr Led(uint8_t pinNumber) : pin(pinNumber) {}
+    explicit constexpr Led(
+      uint8_t pinNumber, uint8_t blinkDuration, unsigned long storedTimestamp) :
+      pin(pinNumber), duration(blinkDuration), storedTimestamp(storedTimestamp) {}
 
     void init() const {
       pinMode(pin, OUTPUT);
@@ -38,73 +41,78 @@ class Led {
       digitalWrite(pin, static_cast<uint8_t>(state));
     }
 
+    void setStoredTimestamp(unsigned long timestamp) {
+      const_cast<unsigned long&>(storedTimestamp) = timestamp;
+    }
+
     uint8_t getPin() const {
       return pin;
     }
+
+    uint8_t getBlinkDuration() const {
+      return duration;
+    }
+    unsigned long getStoredTimestamp() const {
+      return storedTimestamp;
+    }
 };
 
-//Configure interrupt service routine
-void IRAM_ATTR LedISR() {
-  if (EndTime == 0) {
-    EndTime = micros();
-    isBlinking = true;
-  }
-}
-
-static const Led Led1 (Config::Led1);
-static const Led Led2 (Config::Led2);
-static const Led Led3 (Config::Led3);
+static  Led Led1 (Config::Led1, 200, 0);
+static  Led Led2 (Config::Led2, 500, 0);
+static  Led Led3 (Config::Led3, 1000, 0);
 
 void setup() {
   Serial.begin(Config::BaudRate);
   Led1.init();
   Led2.init();
   Led3.init();
-  attachInterrupt(digitalPinToInterrupt(Led1.getPin()), LedISR, FALLING);
 
   Serial.println("Getting ready...");
   delay(2000); // Wait for 2 seconds before starting the first measurement
 }
 
 void loop(){
-  if (count < TotalIterations) {
-    EndTime = 0; // Reset end time for the next measurement
-    IsMeasuring = false; // Reset measuring flag
+  if (count < TotalBlinks) {
 
-    Serial.print("Start mesurement #");
-    Serial.print(count + 1);
-    Serial.print(" of ");
-    Serial.println(String(TotalIterations) );
+    volatile bool isBlinking = false;
+    static bool isPaused = false;
+    static LedState currentState = LedState::Off;
+    unsigned long currentMillis = millis();
 
-    StartTime = micros();
-    digitalWrite(RelayPin, HIGH);
+    if (!isBlinking && !isPaused) {
+      isBlinking = true;
+      currentState = (currentState == LedState::Off) ? LedState::On : LedState::Off;
 
-    //wait realy to activate or timeout after 1 second
-    unsigned long timeout = millis();// + 1000;
-    while (!IsMeasuring && (millis() - timeout < 1000)) {
+      Led1.set(currentState);
+      if (currentMillis - Led1.getStoredTimestamp() >= Led1.getBlinkDuration()) {
+        Led1.setStoredTimestamp(currentMillis);
+        digitalWrite(Led1.getPin(), static_cast<uint8_t>(currentState));
+      }
 
-      yield();
-    }
+      Led2.set(currentState);
+      if (currentMillis - Led2.getStoredTimestamp() >= Led2.getBlinkDuration()) {
+        Led2.setStoredTimestamp(currentMillis);
+        digitalWrite(Led2.getPin(), static_cast<uint8_t>(currentState));
+      }
 
-    if(IsMeasuring){
-      unsigned long duration = EndTime - StartTime;
-      TotalDuration += duration;
-      Serial.print("Duration: ");
-      Serial.print(duration/1000.0); // Convert to milliseconds
-      Serial.println(" ms");
+      Led3.set(currentState);
+      if (currentMillis - Led3.getStoredTimestamp() >= Led3.getBlinkDuration()) {
+        Led3.setStoredTimestamp(currentMillis);
+        digitalWrite(Led3.getPin(), static_cast<uint8_t>(currentState));
+      }
+
       count++;
-    } else {
-      Serial.println("Measurement timed out!");
     }
-
-    digitalWrite(RelayPin, LOW);
-    delay(1000); // Wait for 1 second before the next measurement
-
-  } else if (count == TotalIterations) {
-    float average = (TotalDuration / TotalIterations) / 1000.0;
-    Serial.print("Average Duration: ");
-    Serial.print(average);
-    Serial.println(" ms");
-    count++;
+    else {
+      if (!isPaused) {
+        Serial.println("Blinking paused. Press any key to resume...");
+        isPaused = true;
+      }
+      if (Serial.available() > 0) {
+        Serial.read(); // Clear the input buffer
+        isBlinking = false;
+        isPaused = false;
+      }
+    }
   }
 }

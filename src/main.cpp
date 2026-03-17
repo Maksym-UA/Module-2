@@ -2,53 +2,57 @@
 
 struct Button {
   static const uint8_t ButtonPin = 16;
+
   volatile bool ButtonState;
   volatile uint32_t NumberButtonPresses;
-  const  uint8_t DebounceDelay ; // milliseconds
+
+  const  uint16_t DebounceDelay; // milliseconds
+
 };
 
-hw_timer_t * MyTimer = NULL;
+bool IsButtonPressed = false; // Lock to prevent repeat triggers
 
-Button button1 = {false, 0, 50};
+unsigned long LastDebounceTime = 0;  // the last time the output pin was toggled
+Button button = {false, 0, 50};
 
-unsigned long lastPrintTime = 0;
 
-void IRAM_ATTR onTimer() {
-  // Handle button press logic here
-  button1.NumberButtonPresses++;
-  button1.ButtonState = true;
+void IRAM_ATTR HandleButtonInterrupt() {
+// Handle button press logic here
+  button.ButtonState = true;
 }
-
-void IRAM_ATTR handleButtonInterrupt() {
-    // Restart the timer every time noise is detected
-    // This "pushes" the timeout further until the bouncing stops
-    timerWrite(MyTimer, 0);
-    timerAlarmEnable(MyTimer);
-}
-
 
 void setup() {
   Serial.begin(115200);
   pinMode(Button::ButtonPin, INPUT_PULLUP);
-
-  MyTimer = timerBegin(0, 80, true); // Timer 0, prescaler 80 (1 tick = 1 microsecond), count up
-
-  // Attach the onTimer function
-  timerAttachInterrupt(MyTimer, &onTimer, true);
-
-  // Set alarm for 50,000 microseconds (50ms), autoreload = false
-  timerAlarmWrite(MyTimer, button1.DebounceDelay * 1000, false);
-
-  // GPIO Interrupt: Trigger on falling edge
-  attachInterrupt(digitalPinToInterrupt(Button::ButtonPin), handleButtonInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(Button::ButtonPin), HandleButtonInterrupt, FALLING);
 }
-
 
 void loop() {
-    if (button1.ButtonState) {
-        Serial.print("Button pressed! Total presses: ");
-        Serial.println(button1.NumberButtonPresses);
-        button1.ButtonState = false; // Reset the button state
-    }
-}
+  if (button.ButtonState) {
+    unsigned long CurrentTime = millis();
 
+    if ((CurrentTime - LastDebounceTime) > button.DebounceDelay) {
+
+      bool CurrentState = (digitalRead(Button::ButtonPin) == LOW);
+
+      //check if the button is still pressed after debounce delay
+      if (CurrentState && !IsButtonPressed) {
+        Serial.println("Confirmed: Button was pressed.");
+
+        IsButtonPressed = true;
+
+
+      } else if (!CurrentState) {
+        Serial.println("False trigger: Button was NOT pressed.");
+        IsButtonPressed = false;
+      }
+
+      Serial.print("Total presses: ");
+      Serial.println(button.NumberButtonPresses);
+
+      button.NumberButtonPresses++;
+      LastDebounceTime = CurrentTime;
+      button.ButtonState = false; // Reset button state after processing
+    }
+  }
+}

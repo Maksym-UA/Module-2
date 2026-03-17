@@ -1,4 +1,4 @@
-Use the ESP32 internal high-resolution timers instead of CPU-heavy millis() checks.
+ISR implementaion via Level-Checking
 
 
 SETUP

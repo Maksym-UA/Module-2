@@ -26,7 +26,7 @@ void setup() {
 
 void loop() {
     unsigned long currentTime = millis();
-    if (button1.ButtonState && (currentTime - lastPrintTime >= 100)) {
+    if (button1.ButtonState && (currentTime - lastPrintTime >= 50)) {
         Serial.print("Button pressed! Total presses: ");
         Serial.println(button1.NumberButtonPresses);
         button1.ButtonState = false; // Reset the button state

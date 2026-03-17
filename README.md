@@ -1,7 +1,4 @@
-Superloop and independent tasks
-
-
-Hardware Interrupts on ESP32.
+Use the ESP32 internal high-resolution timers instead of CPU-heavy millis() checks.
 
 
 SETUP

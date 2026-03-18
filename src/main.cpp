@@ -47,10 +47,10 @@ void loop() {
         IsButtonPressed = false;
       }
 
+      button.NumberButtonPresses++;
       Serial.print("Total presses: ");
       Serial.println(button.NumberButtonPresses);
 
-      button.NumberButtonPresses++;
       LastDebounceTime = CurrentTime;
       button.ButtonState = false; // Reset button state after processing
     }

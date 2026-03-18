@@ -6,53 +6,62 @@ struct Button {
   volatile bool ButtonState;
   volatile uint32_t NumberButtonPresses;
 
-  const  uint16_t DebounceDelay; // milliseconds
-
+  const  uint16_t DebounceDelay; //ms
+  const uint16_t PollingInterval;
 };
 
 bool IsButtonPressed = false; // Lock to prevent repeat triggers
+bool LastButtonState = HIGH;      // The previous raw reading from the pin
+bool StableButtonState = HIGH;    // The confirmed/debounced state
+bool PressCounted = false;        // Ensure one count per physical press
 
-unsigned long LastDebounceTime = 0;  // the last time the output pin was toggled
-Button button = {false, 0, 50};
+unsigned long LastPressTime = 0;  // Last time a press was counted
+const unsigned long PressLockout = 200; // ms to ignore subsequent presses after one is counted
 
+unsigned long LastSampleTime = 0;
+unsigned long StateStableTime = 0;
 
-void IRAM_ATTR HandleButtonInterrupt() {
-// Handle button press logic here
-  button.ButtonState = true;
-}
+Button button = {false, 0, 50, 10};
+
 
 void setup() {
   Serial.begin(115200);
   pinMode(Button::ButtonPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(Button::ButtonPin), HandleButtonInterrupt, FALLING);
 }
 
 void loop() {
-  if (button.ButtonState) {
-    unsigned long CurrentTime = millis();
+  unsigned long CurrentTime = millis();
 
-    if ((CurrentTime - LastDebounceTime) > button.DebounceDelay) {
+  if (CurrentTime - LastSampleTime >= button.PollingInterval) {
+    LastSampleTime = CurrentTime;
 
-      bool CurrentState = (digitalRead(Button::ButtonPin) == LOW);
+    bool RawState = digitalRead(Button::ButtonPin);
 
-      //check if the button is still pressed after debounce delay
-      if (CurrentState && !IsButtonPressed) {
-        Serial.println("Confirmed: Button was pressed.");
+    if (RawState != LastButtonState) {
+      StateStableTime = CurrentTime; // Reset debounce timer
+      LastButtonState = RawState;
+    }
 
-        IsButtonPressed = true;
+    if (CurrentTime - StateStableTime >= button.DebounceDelay) {
+      // If the state has finally changed and stayed stable
+      if (RawState != StableButtonState) {
+        StableButtonState = RawState;
 
+        // Account press only and ignore button release
+        if (StableButtonState == LOW && !PressCounted && (CurrentTime - LastPressTime > PressLockout)) {
+          Serial.println("Action: Button Pressed (Stable for 50ms)");
+          button.NumberButtonPresses++;
+          Serial.print("Total Presses: ");
+          Serial.println(button.NumberButtonPresses);
+          PressCounted = true;
+          LastPressTime = CurrentTime;
+        }
 
-      } else if (!CurrentState) {
-        Serial.println("False trigger: Button was NOT pressed.");
-        IsButtonPressed = false;
+        // Reset the counted-press lock when the button is released
+        if (StableButtonState == HIGH) {
+          PressCounted = false;
+        }
       }
-
-      Serial.print("Total presses: ");
-      Serial.println(button.NumberButtonPresses);
-
-      button.NumberButtonPresses++;
-      LastDebounceTime = CurrentTime;
-      button.ButtonState = false; // Reset button state after processing
     }
   }
 }

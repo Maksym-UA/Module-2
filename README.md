@@ -1,4 +1,4 @@
-ISR implementaion via Level-Checking
+Hardware interrupts: Polling + debounce without interrupts
 
 
 SETUP

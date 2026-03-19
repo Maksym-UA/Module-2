@@ -5,14 +5,11 @@ static constexpr uint8_t RelayPin = 17;
 static constexpr uint8_t SensorPin = 16;
 static constexpr uint32_t BaudRate = 115200;
 
-static int TotalIterations = 15;
+static constexpr uint8_t TotalIterations = 15;
 
 volatile unsigned long StartTime = 0;
 volatile unsigned long EndTime = 0;
 volatile bool IsMeasuring = false;
-
-unsigned long TotalDuration = 0;
-int count = 0;
 
 //Configure interrupt service routine
 void IRAM_ATTR SensorISR() {
@@ -33,6 +30,10 @@ void setup() {
 }
 
 void loop(){
+
+  static unsigned long TotalDuration = 0;
+  static uint8_t count = 0;
+
   if (count < TotalIterations) {
     EndTime = 0; // Reset end time for the next measurement
     IsMeasuring = false; // Reset measuring flag
@@ -71,6 +72,11 @@ void loop(){
     Serial.print("Average Duration: ");
     Serial.print(average);
     Serial.println(" ms");
-    count++;
+    Serial.println("\n--- Restarting measurements ---\n");
+
+    // Reset for next cycle
+    count = 0;
+    TotalDuration = 0;
+    delay(1000); // Wait before starting next cycle
   }
 }

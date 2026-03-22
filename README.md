@@ -1,5 +1,4 @@
-Hardware interrupts: Polling + debounce without interrupts
-
+ESP32 S3 timers & watchdog and logging
 
 SETUP
 =====

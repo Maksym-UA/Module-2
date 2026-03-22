@@ -1,67 +1,73 @@
+
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 
-struct Button {
-  static const uint8_t ButtonPin = 16;
+//Configuration
+uint32_t workSec = 10; //сек
+uint32_t totalSec = 30;
 
-  volatile bool ButtonState;
-  volatile uint32_t NumberButtonPresses;
+// Змінні стану
+volatile uint32_t secondsCounter = 0;
+volatile bool isFanOn = false;
+volatile bool needLog = false;
 
-  const  uint16_t DebounceDelay; //ms
-  const uint16_t PollingInterval;
-};
+// Об'єкт апаратного таймера
+hw_timer_t * timer = NULL;
 
-bool IsButtonPressed = false; // Lock to prevent repeat triggers
-bool LastButtonState = HIGH;      // The previous raw reading from the pin
-bool StableButtonState = HIGH;    // The confirmed/debounced state
-bool PressCounted = false;        // Ensure one count per physical press
+// Функція переривання (працює в RAM для швидкості)
+void IRAM_ATTR onTimer() {
+  secondsCounter++;
 
-unsigned long LastPressTime = 0;  // Last time a press was counted
-const unsigned long PressLockout = 200; // ms to ignore subsequent presses after one is counted
-
-unsigned long LastSampleTime = 0;
-unsigned long StateStableTime = 0;
-
-Button button = {false, 0, 50, 10};
-
+  if (secondsCounter <= workSec) {
+    if (!isFanOn) {
+      isFanOn = true;
+      needLog = true;
+    }
+  } else if (secondsCounter < totalSec) {
+    if (isFanOn) {
+      isFanOn = false;
+      needLog = true;
+    }
+  } else {
+    secondsCounter = 0; // Скидання циклу
+  }
+  
+  // Керування піном безпосередньо в перериванні
+  digitalWrite(fanPin, isFanOn);
+}
 
 void setup() {
   Serial.begin(115200);
-  pinMode(Button::ButtonPin, INPUT_PULLUP);
+  pinMode(fanPin, OUTPUT);
+
+  // 1. Налаштування Watchdog (ESP32-S3 має специфічне API)
+  // Встановлюємо тайм-аут 5 секунд для поточної задачі
+  esp_task_wdt_init(5, true); 
+  esp_task_wdt_add(NULL);
+
+  // 2. Апаратний таймер
+  // Частота ESP32-S3 зазвичай 80MHz. Дільник 80 дає 1,000,000 тіків на сек.
+  timer = timerBegin(0, 80, true); 
+  timerAttachInterrupt(timer, &onTimer, true);
+  
+  // Встановлюємо спрацювання кожні 1,000,000 мікросекунд (1 сек)
+  timerAlarmWrite(timer, 1000000, true); 
+  timerAlarmEnable(timer);
+
+  Serial.println("ESP32-S3 Fan Controller Started");
 }
 
 void loop() {
-  unsigned long CurrentTime = millis();
+  // 3. Скидання Watchdog
+  esp_task_wdt_reset();
 
-  if (CurrentTime - LastSampleTime >= button.PollingInterval) {
-    LastSampleTime = CurrentTime;
-
-    bool RawState = digitalRead(Button::ButtonPin);
-
-    if (RawState != LastButtonState) {
-      StateStableTime = CurrentTime; // Reset debounce timer
-      LastButtonState = RawState;
-    }
-
-    if (CurrentTime - StateStableTime >= button.DebounceDelay) {
-      // If the state has finally changed and stayed stable
-      if (RawState != StableButtonState) {
-        StableButtonState = RawState;
-
-        // Account press only and ignore button release
-        if (StableButtonState == LOW && !PressCounted && (CurrentTime - LastPressTime > PressLockout)) {
-          Serial.println("Action: Button Pressed (Stable for 50ms)");
-          button.NumberButtonPresses++;
-          Serial.print("Total Presses: ");
-          Serial.println(button.NumberButtonPresses);
-          PressCounted = true;
-          LastPressTime = CurrentTime;
-        }
-
-        // Reset the counted-press lock when the button is released
-        if (StableButtonState == HIGH) {
-          PressCounted = false;
-        }
-      }
-    }
+  // 4. Логування
+  if (needLog) {
+    needLog = false;
+    Serial.printf("[LOG] Статус вентилятора: %s | Час циклу: %u сек\n", 
+                  isFanOn ? "УВІМКНЕНО" : "ВИМКНЕНО", secondsCounter);
   }
+
+  // loop() може "спати" або виконувати інші задачі (напр. Wi-Fi)
+  delay(100); 
 }

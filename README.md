@@ -1,4 +1,4 @@
-ESP32 S3 timers & watchdog and logging
+ESP32 S3 Traffic lights mini project in Arduino framework
 
 SETUP
 =====

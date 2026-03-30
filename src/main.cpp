@@ -1,35 +1,47 @@
 
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include <atomic>
 
 //Configuration
 const uint8_t fanPin = 16;
-uint32_t workSec = 5;
+const uint32_t workSec = 5;
 uint32_t totalSec = 20;
+std::atomic<uint32_t> secondsCounter{0};// Initialize atomic counter to 0
 
+enum class FanState : uint8_t {
+  Off,
+  On,
+};
 
-volatile uint32_t secondsCounter = 0;
 volatile bool isFanOn = false;
 volatile bool needLog = false;
+volatile FanState fanState = FanState::Off;
 
 //ESP32-S3 hardware timer
 hw_timer_t * timer = NULL;
 
 void IRAM_ATTR onTimer() {
-  secondsCounter++;
+  const uint32_t currentSecond = secondsCounter.fetch_add(1, std::memory_order_relaxed) + 1;
 
-  if (secondsCounter <= workSec) {
-    if (!isFanOn) {
-      isFanOn = true;
-      needLog = true;
-    }
-  } else if (secondsCounter < totalSec) {
-    if (isFanOn) {
-      isFanOn = false;
-      needLog = true;
-    }
-  } else {
-    secondsCounter = 0;
+  switch (fanState) {
+    case FanState::Off:
+      if (currentSecond <= workSec) {
+        fanState = FanState::On;
+        isFanOn = true;
+        needLog = true;
+      } else if (currentSecond >= totalSec) {
+        secondsCounter.store(0, std::memory_order_relaxed);
+      }
+      break;
+
+    case FanState::On:
+      if (currentSecond > workSec) {
+        fanState = FanState::Off;
+        isFanOn = false;
+        needLog = true;
+      }
+      break;
   }
 
   digitalWrite(fanPin, isFanOn);

@@ -15,7 +15,7 @@ struct Config {
 };
 
 static int TotalBlinks = 99; // Total blinks across all LEDs before stopping
-int count = 0;
+
 
 // Class to control an LED independently
 class Led {
@@ -61,6 +61,8 @@ void setup() {
 }
 
 void loop() {
+  static int count = 0; // Count total toggles across all LEDs - reviewed by mentor
+
   if (count >= TotalBlinks) {
     Serial.println("Done blinking!");
     digitalWrite(Config::Led1, static_cast<uint8_t>(LedState::Off));

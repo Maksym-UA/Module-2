@@ -1,17 +1,21 @@
 #include <Arduino.h>
 
 struct Button {
-  static const uint8_t ButtonPin = 16;
+  //static тут зайве. З однією кнопкою працювати буде, але якщо їх буде декілька, то у всіх їх ButtonPin буде 16.
+  const uint8_t BUTTON_PIN = 16;
+
   volatile bool ButtonState;
   volatile uint32_t NumberButtonPresses;
-  const  uint8_t DebounceDelay ; // milliseconds
+  const uint8_t DEBOUNCE_DELAY; // milliseconds
+
+  Button(bool state, uint32_t presses, uint8_t debounce)
+    : ButtonState(state), NumberButtonPresses(presses), DEBOUNCE_DELAY(debounce) {}
 };
 
 hw_timer_t * MyTimer = NULL;
 
-Button button1 = {false, 0, 50};
+Button button1(false, 0, 50);
 
-unsigned long lastPrintTime = 0;
 
 void IRAM_ATTR onTimer() {
   // Handle button press logic here
@@ -29,7 +33,7 @@ void IRAM_ATTR handleButtonInterrupt() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(Button::ButtonPin, INPUT_PULLUP);
+  pinMode(button1.BUTTON_PIN, INPUT_PULLUP);
 
   MyTimer = timerBegin(0, 80, true); // Timer 0, prescaler 80 (1 tick = 1 microsecond), count up
 
@@ -37,10 +41,10 @@ void setup() {
   timerAttachInterrupt(MyTimer, &onTimer, true);
 
   // Set alarm for 50,000 microseconds (50ms), autoreload = false
-  timerAlarmWrite(MyTimer, button1.DebounceDelay * 1000, false);
+  timerAlarmWrite(MyTimer, button1.DEBOUNCE_DELAY * 1000, false);
 
   // GPIO Interrupt: Trigger on falling edge
-  attachInterrupt(digitalPinToInterrupt(Button::ButtonPin), handleButtonInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(button1.BUTTON_PIN), handleButtonInterrupt, FALLING);
 }
 
 

@@ -1,11 +1,12 @@
 #include <Arduino.h>
+#include <atomic>
 
 struct Button {
   //static тут зайве. З однією кнопкою працювати буде, але якщо їх буде декілька, то у всіх їх ButtonPin буде 16.
   const uint8_t BUTTON_PIN = 16;
 
   volatile bool ButtonState;
-  volatile uint32_t NumberButtonPresses;
+  std::atomic<uint32_t> NumberButtonPresses;
   const uint8_t DEBOUNCE_DELAY; // milliseconds
 
   Button(bool state, uint32_t presses, uint8_t debounce)

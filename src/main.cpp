@@ -1,67 +1,87 @@
 #include <Arduino.h>
 
-struct Button {
-  static const uint8_t ButtonPin = 16;
-
-  volatile bool ButtonState;
-  volatile uint32_t NumberButtonPresses;
-
-  const  uint16_t DebounceDelay; //ms
-  const uint16_t PollingInterval;
+enum ButtonFSMState {
+  IDLE,
+  DEBOUNCING_PRESS,
+  PRESSED,
+  DEBOUNCING_RELEASE
 };
 
-bool IsButtonPressed = false; // Lock to prevent repeat triggers
-bool LastButtonState = HIGH;      // The previous raw reading from the pin
-bool StableButtonState = HIGH;    // The confirmed/debounced state
-bool PressCounted = false;        // Ensure one count per physical press
+struct Button {
+  static const uint8_t BUTTON_PIN = 16;
 
-unsigned long LastPressTime = 0;  // Last time a press was counted
-const unsigned long PressLockout = 200; // ms to ignore subsequent presses after one is counted
+  volatile uint32_t NumberButtonPresses;
 
-unsigned long LastSampleTime = 0;
-unsigned long StateStableTime = 0;
+  const uint16_t DEBOUNCE_DELAY; //ms
+  const uint16_t POLLING_INTERVAL;
 
-Button button = {false, 0, 50, 10};
+  Button(uint32_t presses, uint16_t debounce, uint16_t polling)
+    : NumberButtonPresses(presses),
+      DEBOUNCE_DELAY(debounce), POLLING_INTERVAL(polling) {}
+};
+
 
 
 void setup() {
   Serial.begin(115200);
-  pinMode(Button::ButtonPin, INPUT_PULLUP);
+  pinMode(Button::BUTTON_PIN, INPUT_PULLUP);
 }
 
 void loop() {
+  static ButtonFSMState State = IDLE;
+  static unsigned long LastSampleTime = 0;
+  static unsigned long StateBaseTime = 0;  // Time when state changed
+  static bool LastRawState = HIGH;
+  static Button button = {0, 50, 10};
+
   unsigned long CurrentTime = millis();
 
-  if (CurrentTime - LastSampleTime >= button.PollingInterval) {
-    LastSampleTime = CurrentTime;
-
-    bool RawState = digitalRead(Button::ButtonPin);
-
-    if (RawState != LastButtonState) {
-      StateStableTime = CurrentTime; // Reset debounce timer
-      LastButtonState = RawState;
-    }
-
-    if (CurrentTime - StateStableTime >= button.DebounceDelay) {
-      // If the state has finally changed and stayed stable
-      if (RawState != StableButtonState) {
-        StableButtonState = RawState;
-
-        // Account press only and ignore button release
-        if (StableButtonState == LOW && !PressCounted && (CurrentTime - LastPressTime > PressLockout)) {
-          Serial.println("Action: Button Pressed (Stable for 50ms)");
-          button.NumberButtonPresses++;
-          Serial.print("Total Presses: ");
-          Serial.println(button.NumberButtonPresses);
-          PressCounted = true;
-          LastPressTime = CurrentTime;
-        }
-
-        // Reset the counted-press lock when the button is released
-        if (StableButtonState == HIGH) {
-          PressCounted = false;
-        }
-      }
-    }
+  if (CurrentTime - LastSampleTime < button.POLLING_INTERVAL) {
+    return;  // Not yet time to sample
   }
+  LastSampleTime = CurrentTime;
+
+  bool RawState = digitalRead(Button::BUTTON_PIN);
+
+  switch (State) {
+    case IDLE:
+      if (RawState == LOW) {
+        State = DEBOUNCING_PRESS;
+        StateBaseTime = CurrentTime;
+      }
+      break;
+
+    case DEBOUNCING_PRESS:
+      if (RawState == HIGH) {
+        // Pin went back HIGH, stay in IDLE
+        State = IDLE;
+      } else if (CurrentTime - StateBaseTime >= button.DEBOUNCE_DELAY) {
+        // Pin stayed LOW long enough
+        Serial.println("Action: Button Pressed (Stable for 50ms)");
+        button.NumberButtonPresses++;
+        Serial.print("Total Presses: ");
+        Serial.println(button.NumberButtonPresses);
+        State = PRESSED;
+      }
+      break;
+
+    case PRESSED:
+      if (RawState == HIGH) {
+        State = DEBOUNCING_RELEASE;
+        StateBaseTime = CurrentTime;
+      }
+      break;
+
+    case DEBOUNCING_RELEASE:
+      if (RawState == LOW) {
+        // Pin went back LOW, stay in PRESSED
+        State = PRESSED;
+      } else if (CurrentTime - StateBaseTime >= button.DEBOUNCE_DELAY) {
+        // Pin stayed HIGH long enough, button release confirmed
+        State = IDLE;
+      }
+      break;
+  }
+
+  LastRawState = RawState;
 }

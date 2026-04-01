@@ -28,31 +28,17 @@ void setup() {
 }
 
 void loop() {
-  if (button.ButtonState) {
-    unsigned long CurrentTime = millis();
+  if (!button.ButtonState) return;
 
-    if ((CurrentTime - LastDebounceTime) > button.DebounceDelay) {
+  unsigned long currentTime = millis();
+  if ((currentTime - LastDebounceTime) <= button.DebounceDelay) return;
 
-      bool CurrentState = (digitalRead(Button::ButtonPin) == LOW);
+  button.ButtonState = false;
+  LastDebounceTime = currentTime;
 
-      //check if the button is still pressed after debounce delay
-      if (CurrentState && !IsButtonPressed) {
-        Serial.println("Confirmed: Button was pressed.");
-
-        IsButtonPressed = true;
-
-
-      } else if (!CurrentState) {
-        Serial.println("False trigger: Button was NOT pressed.");
-        IsButtonPressed = false;
-      }
-
-      button.NumberButtonPresses++;
-      Serial.print("Total presses: ");
-      Serial.println(button.NumberButtonPresses);
-
-      LastDebounceTime = CurrentTime;
-      button.ButtonState = false; // Reset button state after processing
-    }
+  if (digitalRead(Button::ButtonPin) == LOW) {
+    button.NumberButtonPresses++;
+    Serial.print("Total presses: ");
+    Serial.println(button.NumberButtonPresses);
   }
 }
